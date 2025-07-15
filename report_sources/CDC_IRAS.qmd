@@ -19,7 +19,8 @@ pacman::p_load(
   tsibble,
   ISOweek,
   patchwork,
-  ggpubr
+  ggpubr,
+  ggsci
 )
 ```
 
@@ -29,6 +30,15 @@ pacman::p_load(
 data <- import(here("data", "datos_abiertos_vigilancia_iras_2000_2023.csv"))
 
 distritos <- st_read(here("data", "Shape_distritos", "CDC_Distritos_2022.shp"))
+
+# Shape file
+data_departamentos <- sf::st_read(
+  here(
+    "data",
+    "Shape_departamentos",
+    "DEPARTAMENTOS_inei_geogpsperu_suyopomalia.shp")
+  ) |>
+  rename(departamento = NOMBDEP)
 ```
 
 # Process data
@@ -431,6 +441,46 @@ ggsave(
   dpi = 300,
   bg = "white")
 ```
+
+# map
+
+```{r}
+#| fig-height: 8
+#| fig-width: 6
+data_map <- data |>
+  select(ano, semana, departamento, neumonias_men5) |>
+  filter(ano == "2020") |>
+  group_by(departamento) |>
+  summarise(neumonias_men5 = sum(neumonias_men5, na.rm = TRUE), .groups = "drop")
+
+casos <-  data_departamentos |>
+  left_join(data_map, by = "departamento")
+
+mapa <- casos |>
+  ggplot() +
+  geom_sf(aes(fill = neumonias_men5)) +
+  labs(title = "Episodios de IRAS en menores de 5 años",
+       fill = "Episodios") +
+  scale_fill_bs5("orange") +
+  theme_classic2()
+
+ggsave(
+  here("outputs", "mapa.png"),
+  plot = mapa,
+  width = 6,
+  height = 8,
+  dpi = 300,
+  bg = "white"
+)
+
+mapa
+```
+
+
+
+
+
+
 
 ```{r}
 ggplot(data_hospitalizados_60) +                     # Utiliza el NUEVO conjunto de datos con el hospital como factor reordenado
