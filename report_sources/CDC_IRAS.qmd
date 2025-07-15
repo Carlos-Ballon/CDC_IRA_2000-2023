@@ -1,0 +1,185 @@
+---
+title: "CDC_IRAS"
+format: docx
+editor: source
+---
+
+# Load packages
+
+```{r}
+pacman::p_load(
+  tidyverse,
+  janitor,
+  here,
+  rio,
+  flextable,
+  Hmisc,
+  sf,
+  lubridate,
+  tsibble,
+  ISOweek
+)
+```
+
+# Import data
+
+```{r}
+data <- import(here("data", "datos_abiertos_vigilancia_iras_2000_2023.csv"))
+
+distritos <- st_read(here("data", "Shape_distritos", "CDC_Distritos_2022.shp"))
+```
+
+# Process data
+
+```{r}
+data_q <- data |>
+  clean_names() |>
+  dplyr::filter(!is.na(neumonias_men5)) |>
+  mutate(quintenio = case_when(
+    ano >= 2000 & ano <= 2004 ~ "2000-2004",
+    ano >= 2005 & ano <= 2009 ~ "2005-2009",
+    ano >= 2010 & ano <= 2014 ~ "2010-2014",
+    ano >= 2015 & ano <= 2019 ~ "2015-2019",
+    ano >= 2020 & ano <= 2023 ~ "2020-2023"
+  )) |>
+  mutate(ubigeo = str_pad(as.character(ubigeo), width = 6, pad = "0")) |>
+  group_by(ubigeo) |>
+  summarise(total_casos = sum(neumonias_men5, na.rm = TRUE), .groups = "drop")
+```
+
+## Episodios de neumonías en niños menores de 5 años
+
+```{r}
+data_ira_5 <- data |>
+  mutate(quintenio = case_when(
+    ano >= 2000 & ano <= 2004 ~ "2000-2004",
+    ano >= 2005 & ano <= 2009 ~ "2005-2009",
+    ano >= 2010 & ano <= 2014 ~ "2010-2014",
+    ano >= 2015 & ano <= 2019 ~ "2015-2019",
+    ano >= 2020 & ano <= 2023 ~ "2020-2023"
+  )) |>
+  group_by(ano, semana, quintenio) |>
+  summarise(neumonias = sum(neumonias_men5), .groups = "drop")
+
+data_ira_5 <- data_ira_5 |>
+  filter(semana >= 1 & semana <= 53) |>
+  mutate(
+    semana_str = str_pad(semana, 2, pad = "0"),
+    week_id = paste0(ano, "-W", semana_str),
+    week_date = ISOweek::ISOweek2date(paste0(week_id, "-1")),
+    week = yearweek(week_date)
+  )
+```
+
+```{r}
+#| fig-height: 8
+#| fig-width: 16
+F_neumonia_5 <- data_ira_5 |>
+  ggplot(aes(x = week, y = neumonias, color = quintenio)) +
+  geom_line(size = 0.7) + 
+  scale_x_yearweek(date_labels = "%Y W%V", date_breaks = "1 year") +
+  scale_y_continuous(breaks = seq(0, 2500, by = 300)) +
+  labs(
+    x = "Semana epidemiológica", 
+    y = "Neumonías en niños menores de 5 años") +
+  theme_minimal(base_size = 18) +
+  ggsci::scale_color_jco() +
+  theme(
+    legend.position = "top",
+    legend.title = element_blank(),
+    legend.text = element_text(color = "#272822"),
+    axis.text.x = element_text(angle = 45, hjust = 1, color = "#272822"),
+    axis.text.y = element_text(color = "#272822"),
+    panel.grid.minor = element_blank(),
+    axis.line = element_line(color = "grey50"),
+    axis.ticks = element_line(color = "grey50"),
+    axis.title.x = element_text(margin = margin(t = 10, r = 10, b = 0, l = 0)),
+    axis.title.y = element_text(margin = margin(t = 0, r = 5, b = 0, l = 10))
+  )
+
+F_neumonia_5
+
+ggsave(
+  here("outputs", "F_neumonia_5.png"),
+  plot = F_neumonia_5,
+  width = 16,
+  height = 8,
+  dpi = 300,
+  bg = "white")
+```
+
+## Casos de IRAS no neumonías en menores de 5 años
+
+```{r}
+data_ira_no <- data |>
+  mutate(quintenio = case_when(
+    ano >= 2000 & ano <= 2004 ~ "2000-2004",
+    ano >= 2005 & ano <= 2009 ~ "2005-2009",
+    ano >= 2010 & ano <= 2014 ~ "2010-2014",
+    ano >= 2015 & ano <= 2019 ~ "2015-2019",
+    ano >= 2020 & ano <= 2023 ~ "2020-2023"
+  )) |>
+  group_by(ano, semana, quintenio) |>
+  summarise(no_neumonias = sum(ira_no_neumonia), .groups = "drop")
+
+data_ira_no <- data_ira_no |>
+  filter(semana >= 1 & semana <= 53) |>
+  mutate(
+    semana_str = str_pad(semana, 2, pad = "0"),
+    week_id = paste0(ano, "-W", semana_str),
+    week_date = ISOweek::ISOweek2date(paste0(week_id, "-1")),
+    week = yearweek(week_date)
+  )
+```
+
+```{r}
+#| fig-height: 8
+#| fig-width: 16
+F_neumonia_no <- data_ira_no |>
+  ggplot(aes(x = week, y = no_neumonias, color = quintenio)) +
+  geom_line(size = 0.7) + 
+  scale_x_yearweek(date_labels = "%Y W%V", date_breaks = "1 year") +
+  scale_y_continuous(breaks = seq(0, 2500, by = 300)) +
+  labs(
+    x = "Semana epidemiológica", 
+    y = "IRAS no neumonías en menores de 5 años") +
+  theme_minimal(base_size = 18) +
+  ggsci::scale_color_jco() +
+  theme(
+    legend.position = "top",
+    legend.title = element_blank(),
+    legend.text = element_text(color = "#272822"),
+    axis.text.x = element_text(angle = 45, hjust = 1, color = "#272822"),
+    axis.text.y = element_text(color = "#272822"),
+    panel.grid.minor = element_blank(),
+    axis.line = element_line(color = "grey50"),
+    axis.ticks = element_line(color = "grey50"),
+    axis.title.x = element_text(margin = margin(t = 10, r = 10, b = 0, l = 0)),
+    axis.title.y = element_text(margin = margin(t = 0, r = 5, b = 0, l = 10))
+  )
+
+F_neumonia_no
+
+ggsave(
+  here("outputs", "F_neumonia_no.png"),
+  plot = F_neumonia_no,
+  width = 16,
+  height = 8,
+  dpi = 300,
+  bg = "white")
+```
+
+
+
+
+```{r}
+categorical_vars |>
+  janitor::tabyl(area_residencia_factor, DBM_anemia_stunting_factor) |>
+  janitor::adorn_totals(where = "both") |>
+  janitor::adorn_percentages(denominator = "col") |>
+  janitor::adorn_pct_formatting() |>
+  janitor::adorn_ns(position = "front") |>
+  flextable::flextable() |>
+  flextable::autofit()
+```
+
